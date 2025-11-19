@@ -1,77 +1,54 @@
-# Exp 3 Sobel edge detection filter using CUDA to enhance the performance of image processing tasks
-
+# Exp3-Sobel-edge-detection-filter-using-CUDA-to-enhance-the-performance-of-image-processing-tasks.
 ### ENTER YOUR NAME: VINCY JOVITHA V
 ### REGISTER NO: 212223230242
 
-## Background: 
-  - The Sobel operator is a popular edge detection method that computes the gradient of the image intensity at each pixel. It uses convolution with two kernels to determine the gradient in both the x and y directions. 
-  - This lab focuses on utilizing CUDA to parallelize the Sobel filter implementation for efficient processing of images.
+<h3>EX. NO: 03</h3>
+<h3>DATE:25-09-2025</h3>
+<h1> <align=center> Sobel edge detection filter using CUDA </h3>
+  Implement Sobel edge detection filtern using GPU.</h3>
+Experiment Details:
+  
+## AIM:
+  The Sobel operator is a popular edge detection method that computes the gradient of the image intensity at each pixel. It uses convolution with two kernels to determine the gradient in both the x and y directions. This lab focuses on utilizing CUDA to parallelize the Sobel filter implementation for efficient processing of images.
 
-## Aim
-To utilize CUDA to parallelize the Sobel filter implementation for efficient processing of images.
+Code Overview: You will work with the provided CUDA implementation of the Sobel edge detection filter. The code reads an input image, applies the Sobel filter in parallel on the GPU, and writes the result to an output image.
+## EQUIPMENTS REQUIRED:
+Hardware – PCs with NVIDIA GPU & CUDA NVCC
+Google Colab with NVCC Compiler
+CUDA Toolkit and OpenCV installed.
+A sample image for testing.
 
-## Tools Required:
-- A system with CUDA-capable GPU.
-- CUDA Toolkit and OpenCV installed.
+## PROCEDURE:
+Tasks: 
+a. Modify the Kernel:
 
-## Procedure
+Update the kernel to handle color images by converting them to grayscale before applying the Sobel filter.
+Implement boundary checks to avoid reading out of bounds for pixels on the image edges.
 
-1. **Environment Setup**:
-   - Ensure that CUDA and OpenCV are installed and set up correctly on your system.
-   - Have a sample image (`images.jpg`) available in the correct directory to use as input.
+b. Performance Analysis:
 
-2. **Load Image and Convert to Grayscale**:
-   - Use OpenCV to read the input image in color mode.
-   - Convert the image to grayscale as the Sobel operator works on single-channel images.
+Measure the performance (execution time) of the Sobel filter with different image sizes (e.g., 256x256, 512x512, 1024x1024).
+Analyze how the block size (e.g., 8x8, 16x16, 32x32) affects the execution time and output quality.
 
-3. **Initialize and Allocate Memory**:
-   - Determine the width and height of the grayscale image.
-   - Allocate memory on both the host (CPU) and device (GPU) for the image data. Allocate device memory using `cudaMalloc` and check for successful allocation with `checkCudaErrors`.
+c. Comparison:
 
-4. **Performance Analysis Function**:
-   - Define `analyzePerformance`, a function to test the CUDA kernel with different image sizes and block configurations.
-   - For each specified image size (e.g., 256x256, 512x512, 1024x1024), set up the grid and block dimensions.
-   - Launch the Sobel kernel using different block sizes (8x8, 16x16, 32x32) to evaluate the performance impact of each configuration. Record the execution time using CUDA events.
+Compare the output of your CUDA Sobel filter with a CPU-based Sobel filter implemented using OpenCV.
+Discuss the differences in execution time and output quality.
 
-5. **Run Sobel Filter on Original Image**:
-   - Set up the grid and block dimensions for the input image based on a 16x16 block size.
-   - Use CUDA events to measure execution time for the Sobel filter applied to the original image.
-   - Copy the resulting data from device memory to host memory.
-
-6. **Save CUDA Output Image**:
-   - Convert the processed image data on the host back to an OpenCV `Mat` object.
-   - Save the CUDA-processed output image as `output_sobel_cuda.jpeg`.
-
-7. **Compare with OpenCV Sobel Filter**:
-   - For comparison, apply the OpenCV Sobel filter to the grayscale image on the CPU.
-   - Measure the execution time using `std::chrono` for the CPU-based approach.
-   - Save the OpenCV output as `output_sobel_opencv.jpeg`.
-
-8. **Display Results**:
-   - Print the input and output image dimensions.
-   - Print the execution time for the CUDA Sobel filter and the CPU (OpenCV) Sobel filter to compare performance.
-   - Display the breakdown of times for each block size and image size tested.
-
-9. **Cleanup**:
-   - Free all dynamically allocated memory on the host and device to avoid memory leaks.
-   - Destroy CUDA events created for timing.
-
-## Program
-
+## PROGRAM:
 ```cpp
-%%writefile sobel_cuda.cu
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 #include <cuda_runtime.h>
 #include <opencv2/opencv.hpp>
+#include <opencv2/imgproc.hpp>
 #include <chrono>
 
 using namespace cv;
 
-__global__ void sobelFilter(unsigned char *srcImage, unsigned char *dstImage,
+__global__ void sobelFilter(unsigned char *srcImage, unsigned char *dstImage,  
                             unsigned int width, unsigned int height) {
-
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
 
@@ -79,7 +56,8 @@ __global__ void sobelFilter(unsigned char *srcImage, unsigned char *dstImage,
         int Gx[3][3] = {{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
         int Gy[3][3] = {{1, 2, 1}, {0, 0, 0}, {-1, -2, -1}};
 
-        int sumX = 0, sumY = 0;
+        int sumX = 0;
+        int sumY = 0;
 
         for (int i = -1; i <= 1; i++) {
             for (int j = -1; j <= 1; j++) {
@@ -89,9 +67,9 @@ __global__ void sobelFilter(unsigned char *srcImage, unsigned char *dstImage,
             }
         }
 
-        int magnitude = sqrtf(float(sumX * sumX + sumY * sumY));
+        int magnitude = sqrtf(sumX * sumX + sumY * sumY);
         magnitude = min(max(magnitude, 0), 255);
-        dstImage[y * width + x] = (unsigned char)magnitude;
+        dstImage[y * width + x] = static_cast<unsigned char>(magnitude);
     }
 }
 
@@ -102,14 +80,46 @@ void checkCudaErrors(cudaError_t r) {
     }
 }
 
-int main() {
+void analyzePerformance(const std::vector<std::pair<int, int>>& sizes, 
+                        const std::vector<int>& blockSizes, unsigned char *d_inputImage, 
+                        unsigned char *d_outputImage) {
+                        
+    for (auto size : sizes) {
+        int width = size.first;
+        int height = size.second;
 
-    Mat image = imread("creative2.jpg", IMREAD_COLOR);
+        printf("CUDA - Size: %dx%d\n", width, height);
+        
+        dim3 gridSize(ceil(width / 16.0), ceil(height / 16.0));
+        for (auto blockSize : blockSizes) {
+            dim3 blockDim(blockSize, blockSize);
+            cudaEvent_t start, stop;
+            cudaEventCreate(&start);
+            cudaEventCreate(&stop);
+
+            cudaEventRecord(start);
+            sobelFilter<<<gridSize, blockDim>>>(d_inputImage, d_outputImage, width, height);
+            cudaEventRecord(stop);
+            cudaEventSynchronize(stop);
+
+            float milliseconds = 0;
+            cudaEventElapsedTime(&milliseconds, start, stop);
+            printf("    Block Size: %dx%d Time: %f ms\n", blockSize, blockSize, milliseconds);
+
+            cudaEventDestroy(start);
+            cudaEventDestroy(stop);
+        }
+    }
+}
+
+int main() {
+    Mat image = imread("/content/images.jpg", IMREAD_COLOR);
     if (image.empty()) {
-        printf("Error: Image not found at /content/image.jpg\n");
+        printf("Error: Image not found.\n");
         return -1;
     }
 
+    // Convert to grayscale
     Mat grayImage;
     cvtColor(image, grayImage, COLOR_BGR2GRAY);
 
@@ -118,18 +128,26 @@ int main() {
     size_t imageSize = width * height * sizeof(unsigned char);
 
     unsigned char *h_outputImage = (unsigned char *)malloc(imageSize);
+    if (h_outputImage == nullptr) {
+        fprintf(stderr, "Failed to allocate host memory\n");
+        return -1;
+    }
 
     unsigned char *d_inputImage, *d_outputImage;
     checkCudaErrors(cudaMalloc(&d_inputImage, imageSize));
     checkCudaErrors(cudaMalloc(&d_outputImage, imageSize));
-    checkCudaErrors(cudaMemcpy(d_inputImage, grayImage.data, imageSize, cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpy(d_inputImage,grayImage.data,imageSize,cudaMemcpyHostToDevice));
 
-    // Kernel configuration
+    // Performance analysis
+    std::vector<std::pair<int, int>> sizes = {{256, 256}, {512, 512}, {1024, 1024}};
+    std::vector<int> blockSizes = {8, 16, 32};
+
+    analyzePerformance(sizes, blockSizes, d_inputImage, d_outputImage);
+
+    // Execute CUDA Sobel filter one last time for the original image
+    dim3 gridSize(ceil(width / 16.0), ceil(height / 16.0));
     dim3 blockDim(16, 16);
-    dim3 gridSize((width + blockDim.x - 1) / blockDim.x,
-                  (height + blockDim.y - 1) / blockDim.y);
 
-    // CUDA timing
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
@@ -139,57 +157,66 @@ int main() {
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
 
-    float cudaTime = 0;
-    cudaEventElapsedTime(&cudaTime, start, stop);
+    float milliseconds = 0;
+    cudaEventElapsedTime(&milliseconds, start, stop);
+    checkCudaErrors(cudaMemcpy(h_outputImage,d_outputImage,imageSize,cudaMemcpyDeviceToHost));
 
-    checkCudaErrors(cudaMemcpy(h_outputImage, d_outputImage, imageSize, cudaMemcpyDeviceToHost));
-
+    // Output image
     Mat outputImage(height, width, CV_8UC1, h_outputImage);
-    imwrite("/content/output_sobel_cuda.jpg", outputImage);
+    imwrite("output_sobel_cuda.jpeg", outputImage);
 
-    // OpenCV Sobel timing
+    // OpenCV Sobel filter for comparison
     Mat opencvOutput;
     auto startCpu = std::chrono::high_resolution_clock::now();
-    Sobel(grayImage, opencvOutput, CV_8U, 1, 1, 3);
+    cv::Sobel(grayImage, opencvOutput, CV_8U, 1, 0, 3);
     auto endCpu = std::chrono::high_resolution_clock::now();
-    double cpuTime = std::chrono::duration<double, std::milli>(endCpu - startCpu).count();
+    std::chrono::duration<double, std::milli> cpuDuration = endCpu - startCpu;
 
-    imwrite("/content/output_sobel_opencv.jpg", opencvOutput);
+    // Save and display OpenCV output
+    imwrite("output_sobel_opencv.jpeg", opencvOutput);
+    
+    printf("Input Image Size: %d x %d\n", width, height);
+    printf("Output Image Size (CUDA): %d x %d\n", outputImage.cols, outputImage.rows);
+    printf("Total time taken (CUDA): %f ms\n", milliseconds);
+    printf("OpenCV Sobel Time: %f ms\n", cpuDuration.count());
 
-    printf("Image Size: %d x %d\n", width, height);
-    printf("CUDA Sobel Time: %f ms\n", cudaTime);
-    printf("OpenCV Sobel Time: %f ms\n", cpuTime);
-
+    // Cleanup
+    free(h_outputImage);
     cudaFree(d_inputImage);
     cudaFree(d_outputImage);
-    free(h_outputImage);
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
 
     return 0;
 }
 ```
-
 ## Output Explanation
 
 | Original 	|  Output using Cuda |
 |:-:	|:-:	|
-| ![creative2](https://github.com/user-attachments/assets/4ebd5792-49d3-4302-8363-0948d56ea11d) | <img width="513" height="401" alt="image" src="https://github.com/user-attachments/assets/d2c51980-937b-4288-9ed7-e97578c7414c" /> |
+| ![image](https://github.com/user-attachments/assets/e7fa9849-d486-4669-bc6c-1f0bea126742) | ![image](https://github.com/user-attachments/assets/2a5b6bd2-cd38-419f-bed4-f06ca45d6a76) |
 
 | Original 	|  Output using OpenCV |
 |:-:	|:-:	|
-| ![creative2](https://github.com/user-attachments/assets/161d1698-49cd-4808-8423-bb55aad3f4fb) | <img width="513" height="338" alt="image" src="https://github.com/user-attachments/assets/969b837c-a34f-45b5-a15b-e9f673de5663" /> |
+| ![image](https://github.com/user-attachments/assets/e7fa9849-d486-4669-bc6c-1f0bea126742) |  ![image](https://github.com/user-attachments/assets/7ce4e5eb-5de7-44a0-8142-3c7d1c9ecc13) |
 
 - **Sample Execution Results**:
-  - **CUDA Execution Times (Sobel filter) AND OpenCV Execution Time**
+  - **CUDA Execution Times (Sobel filter)**
   </br>
-<img width="250" height="56" alt="image" src="https://github.com/user-attachments/assets/bc42154f-6124-4fdf-9129-d7e53a82377c" />
+
+<img src="https://github.com/user-attachments/assets/bc4f2f40-2f6c-4dd8-af8b-e4583b28079d" width="400">
+
+
+  - **OpenCV Execution Time**
+  </br>
+
+![image](https://github.com/user-attachments/assets/db287c68-1ae8-42a4-9ef3-a78f16d0de37)
 
 - **Graph Analysis**:
   - Displayed a graph showing the relationship between image size, block size, and execution time.
  </br>
 
-<img width="585" height="468" alt="image" src="https://github.com/user-attachments/assets/1cf9bb69-5174-4af7-99f7-abb590647d89" />
+<img src="https://github.com/user-attachments/assets/ddb5fb05-53fe-440f-8876-0d3797de1bb5" width="500">
 
 
 ## Answers to Questions
@@ -209,3 +236,4 @@ int main() {
 
 ## Result
 Successfully implemented a CUDA-accelerated Sobel filter, demonstrating significant performance improvement over the CPU-based implementation, with an efficient parallelized approach for edge detection in image processing.
+
